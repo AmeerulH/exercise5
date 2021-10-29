@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/status.dart' as status;
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -13,33 +18,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Day 5 Exercise'),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
 
   final String title;
 
@@ -48,68 +35,134 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  String symbol = '';
+  String data = '';
+  List symbols = [];
+  List tickHistory = [];
+  dynamic symbolDetails;
+  final channel = IOWebSocketChannel.connect(
+      'wss://ws.binaryws.com/websockets/v3?app_id=1089');
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  var _controller = TextEditingController();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  // void getSymbols() {
+  //   channel.stream.listen((message) {
+  //     final decodedMessage = jsonDecode(message);
+  //     final symbolsData = decodedMessage['active_symbols'];
+  //     setState(() {
+  //       symbolsData.forEach((value) => {
+  //             value.containsKey('symbol') ? symbols.add(value['symbol']) : null
+  //           });
+  //     });
+  //     print(symbols);
+  //     print(symbolDetails);
+  //     channel.sink.close();
+  //   });
+
+  //   channel.sink.add('{"active_symbols": "brief", "product_type": "basic"}');
+  // }
+
+  void getData(symbol) {
+    channel.stream.listen((tick) {
+      final decodedMessage = jsonDecode(tick);
+      final serverTimeAsEpoch = decodedMessage['tick']['epoch'];
+      final price = decodedMessage['tick']['quote'];
+      final name = decodedMessage['tick']['symbol'];
+      final serverTime =
+          DateTime.fromMillisecondsSinceEpoch(serverTimeAsEpoch * 1000);
+      print('Name: ${name}, Price: ${price}, Date: ${serverTime}');
+      channel.sink.close();
     });
+
+    channel.sink.add('{$symbol: "frxAUDCAD"}');
+  }
+
+  @override
+  // ignore: must_call_super
+  void initState() {
+    //getSymbols();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
+        appBar: AppBar(
+          title: Text(widget.title),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+        body: Container(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _controller,
+                  decoration: InputDecoration(
+                    hintText: 'Enter Symbol: ',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      onPressed: _formKey.currentState?.validate() ?? false
+                          ? () {
+                              getData(symbol);
+                            }
+                          : null,
+                      icon: const Icon(Icons.check_circle_rounded),
+                    ),
+                  ),
+                  validator: (String? value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a symbol';
+                    }
+                    return null;
+                  },
+                  onChanged: (String? value) {
+                    setState(() {
+                      symbol = value!;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ));
   }
 }
+
+// class DetailsPage extends StatelessWidget {
+//   const DetailsPage({Key? key}) : super(key: key);
+
+//   // This widget is the root of your application.
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//         home: Scaffold(
+//             appBar: AppBar(
+//               title: const Text('Home Page'),
+//               flexibleSpace: Container(
+//                 decoration: const BoxDecoration(
+//                   gradient: LinearGradient(
+//                       colors: [
+//                         Color(0xFF3366FF),
+//                         Color(0xFF00CCFF),
+//                       ],
+//                       begin: FractionalOffset(0.0, 0.0),
+//                       end: FractionalOffset(1.0, 0.0),
+//                       stops: [0.0, 1.0],
+//                       tileMode: TileMode.clamp),
+//                 ),
+//               ),
+//             ),
+//             body: Center(
+//                 child: Column(
+//               children: [
+//                 // Text(
+//                 //   'Hello ${user.name}!',
+//                 //   style: const TextStyle(
+//                 //     fontSize: 40,
+//                 //     color: Colors.black,
+//                 //   ),
+//                 //   textAlign: TextAlign.center,
+//                 // ),
+//               ],
+//             ))));
+//   }
+// }
